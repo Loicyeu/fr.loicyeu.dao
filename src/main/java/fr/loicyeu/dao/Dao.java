@@ -1,6 +1,8 @@
 package fr.loicyeu.dao;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -14,6 +16,8 @@ public final class Dao<E> {
 
     private final Connection connection;
     private final Class<E> clazz;
+    private final Constructor<E> constructor;
+    private final boolean fetchSuperFields;
 
     private final String tableName;
     private final Map<Field, DaoField> daoFieldMap;
@@ -25,15 +29,17 @@ public final class Dao<E> {
      *
      * @param connection La connexion SQL.
      * @param e          Le type du DAO.
+     * @throws IllegalArgumentException Si la classe ne possède pas l'annotation {@link DaoTable}, ou ne comporte pas
+     *                                  de constructeur vide, ou alors est abstraite ou est une interface.
      */
     public Dao(Connection connection, Class<E> e) throws IllegalArgumentException {
-        if (!e.isAnnotationPresent(DaoTable.class)) {
-            throw new IllegalArgumentException("La classe '" + e.getSimpleName() + "' ne porte pas l'annotation" +
-                    "'DaoTable' et ne peut donc pas être utilisé par le DAO.");
-        }
+        this.constructor = isValideClass(e);
+        DaoTable daoTable = e.getAnnotation(DaoTable.class);
+        this.tableName = daoTable.tableName();
+        this.fetchSuperFields = daoTable.fetchSuperFields();
+
         this.connection = connection;
         this.clazz = e;
-        this.tableName = clazz.getSimpleName();
         this.daoFieldMap = getAnnotatedFields(this.clazz);
         this.fieldTypeMap = getFieldsDetails();
         this.primaryKeys = getPrimaryKeys();
@@ -132,6 +138,33 @@ public final class Dao<E> {
     }
 
 
+    /**
+     * Méthode permettant de vérifier que la classe fournie soit bien conforme aux exigences.
+     *
+     * @param clazz La classe a vérifier.
+     * @return Le constructeur vide de la classe dans le cas ou elle serait valide.
+     * @throws IllegalArgumentException Si la classe ne possède pas l'annotation {@link DaoTable}, ou ne comporte pas
+     *                                  de constructeur vide, ou alors est abstraite ou est une interface.
+     */
+    private Constructor<E> isValideClass(Class<E> clazz) throws IllegalArgumentException {
+        if (!clazz.isAnnotationPresent(DaoTable.class)) {
+            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() + "' ne porte pas l'annotation" +
+                    "'DaoTable' et ne peut donc pas être utilisé par le DAO.");
+        }
+
+        if (Modifier.isAbstract(clazz.getModifiers()) || Modifier.isInterface(clazz.getModifiers())) {
+            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() + "'" +
+                    "est abstraite ou est une interface et ne peut donc pas être utilisé par le DAO.");
+        }
+
+        try {
+            return clazz.getDeclaredConstructor();
+        } catch (NoSuchMethodException err) {
+            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() +
+                    "' ne comporte pas de constructeur vide et ne peut donc pas être utilisé par le DAO.");
+        }
+    }
+
     private Map<Field, DaoField> getAnnotatedFields(Class<?> clazz) {
         Map<Field, DaoField> daoFieldMap = new HashMap<>();
         for (Field field : clazz.getDeclaredFields()) {
@@ -139,28 +172,33 @@ public final class Dao<E> {
                 daoFieldMap.put(field, field.getAnnotation(DaoField.class));
             }
         }
+        if (fetchSuperFields) {
+            Class<?> cl = clazz.getSuperclass();
+            while (cl != null && cl.isAnnotationPresent(DaoSuper.class)) {
+                for (Field field : cl.getDeclaredFields()) {
+                    if (field.isAnnotationPresent(DaoField.class)) {
+                        daoFieldMap.put(field, field.getAnnotation(DaoField.class));
+                    }
+                }
+                cl = cl.getSuperclass();
+            }
+        }
         return daoFieldMap;
     }
 
     private Map<String, FieldType> getFieldsDetails() {
         Map<String, FieldType> map = new HashMap<>();
-        for (Field field : this.daoFieldMap.keySet()) {
-            if (field.isAnnotationPresent(DaoField.class)) {
-                DaoField daoField = field.getAnnotation(DaoField.class);
-                map.put(daoField.name(), daoField.type());
-            }
-        }
+        this.daoFieldMap.forEach((field, daoField) -> map.put(daoField.name(), daoField.type()));
         return map;
     }
 
     private List<String> getPrimaryKeys() {
         List<String> primaryKeys = new ArrayList<>();
-        for (Field field : this.daoFieldMap.keySet()) {
-            if (field.isAnnotationPresent(DaoField.class) && field.isAnnotationPresent(PrimaryKey.class)) {
-                DaoField daoField = field.getAnnotation(DaoField.class);
+        this.daoFieldMap.forEach((field, daoField) -> {
+            if (field.isAnnotationPresent(PrimaryKey.class)) {
                 primaryKeys.add(daoField.name());
             }
-        }
+        });
         return primaryKeys;
     }
 
@@ -179,15 +217,30 @@ public final class Dao<E> {
 
     private E createInstance(ResultSet resultSet) {
         try {
-            E e = clazz.getDeclaredConstructor().newInstance();
+            constructor.setAccessible(true);
+            E e = constructor.newInstance();
             for (Field field : daoFieldMap.keySet()) {
                 field.setAccessible(true);
-                field.set(e, resultSet.getObject(daoFieldMap.get(field).name()));
+                field.set(e, getValueFromResultSet(resultSet, daoFieldMap.get(field).name()));
             }
             return e;
         } catch (Exception err) {
             err.printStackTrace();
             return null;
+        }
+    }
+
+    private Object getValueFromResultSet(ResultSet resultSet, String name) throws SQLException {
+        try {
+            return switch (fieldTypeMap.get(name)) {
+                case BOOLEAN -> resultSet.getBoolean(name);
+                case INT -> resultSet.getInt(name);
+                case FLOAT -> resultSet.getFloat(name);
+                case DOUBLE -> resultSet.getDouble(name);
+                case CHAR, VARCHAR, LONG_VARCHAR -> resultSet.getString(name);
+            };
+        }catch (SQLException ignored) {
+            return resultSet.getObject(name);
         }
     }
 
