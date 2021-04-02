@@ -5,6 +5,7 @@ public enum FieldType {
     BOOLEAN("BOOLEAN"),
     INT("INT"),
     FLOAT("FLOAT"),
+    DOUBLE("DOUBLE"),
     CHAR("CHAR(1)"),
     VARCHAR("VARCHAR(255)"),
     LONG_VARCHAR("VARCHAR(1023)");
