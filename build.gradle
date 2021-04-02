@@ -2,18 +2,26 @@ plugins {
     id 'java'
 }
 
-group 'fr.loicyeu'
-version '1.0-SNAPSHOT'
+java {
+    modularity.inferModulePath = true
+}
+
+compileJava {
+    options.compilerArgs << '-parameters'
+    options.compilerArgs << '-g:vars'
+    options.encoding = 'UTF-8'
+    sourceCompatibility = 15
+    targetCompatibility = 15
+}
+
+group = 'fr.loicyeu'
+version = '1.0-SNAPSHOT'
+description = "Loicyeu DAO"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
-}
 
-test {
-    useJUnitPlatform()
 }
