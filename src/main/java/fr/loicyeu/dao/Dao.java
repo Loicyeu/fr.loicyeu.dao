@@ -1,5 +1,10 @@
 package fr.loicyeu.dao;
 
+import fr.loicyeu.dao.exceptions.DaoException;
+import fr.loicyeu.dao.exceptions.MissingPrimaryKeyException;
+import fr.loicyeu.dao.exceptions.NoPrimaryKeyException;
+import fr.loicyeu.dao.exceptions.WrongPrimaryKeyException;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -12,6 +17,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Représente un DAO générique permettant la gestion d'une base de données pour une classe donnée.<br>
+ * La classe du DAO ne doit pas être abstraite ou être une interface.
+ * Elle doit également être annoter par {@link DaoTable}
+ * et posséder une constructeur ne pennant aucun paramètre (peut importe l'encapsulation).
+ *
+ * @param <E> La classe du DAO.
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @version 1.0
+ * @since 1.0
+ */
 public final class Dao<E> {
 
     private final Connection connection;
@@ -94,6 +111,12 @@ public final class Dao<E> {
         }
     }
 
+    /**
+     * Permet d'ajouter un objet dans la base de données.
+     *
+     * @param e L'objet à ajouter à la base de données.
+     * @return Vrai si l'objet a bien été ajouté, faux sinon.
+     */
     public boolean insert(E e) {
         Map<String, Object> fieldsValues = getFieldsValues(e);
         StringBuilder sqlBuilder = new StringBuilder();
@@ -120,7 +143,12 @@ public final class Dao<E> {
         }
     }
 
-    public List<E> findAll() throws Exception {
+    /**
+     * Permet de récupérer tous les objets de la classe du DAO dans la base de données.
+     *
+     * @return Une liste de tous les objets ou {@code null} si une erreur est survenu.
+     */
+    public List<E> findAll() {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + tableName)) {
             ResultSet resultSet = statement.executeQuery();
             List<E> eList = new ArrayList<>();
@@ -131,6 +159,49 @@ public final class Dao<E> {
                 }
             }
             return eList;
+        } catch (SQLException err) {
+            err.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Permet de récupérer un object de la base de donnée a partir de sa/ses clé(s) primaire(s).
+     *
+     * @param primaryKeys Les clés primaires de l'objet a récupérer.
+     * @return L'objet s'il est dans la base de données, {@code null} sinon.
+     * @throws DaoException Si la classe du DAO ne comporte aucune clé primaire,
+     *                      ou si il n'y a pas le bon nombre de clés primaires fournis,
+     *                      ou si les champs passés ne sont pas des clés primaires.
+     */
+    public E findByPk(FieldData... primaryKeys) throws DaoException {
+        if (this.primaryKeys.size() == 0) {
+            throw new NoPrimaryKeyException("La classe du DAO ne comporte aucune clé primaire.");
+        }
+        if (primaryKeys.length != this.primaryKeys.size()) {
+            throw new MissingPrimaryKeyException("Les clés primaires passées en paramètres (" + primaryKeys.length + ") " +
+                    "ne sont pas égales au nombre de clé primaires de la classe (" + this.primaryKeys.size() + ").");
+        }
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("SELECT * FROM ").append(tableName).append(" WHERE ");
+        for (FieldData pk : primaryKeys) {
+            if (this.primaryKeys.contains(pk.fieldName)) {
+                sqlBuilder.append(pk.fieldName).append("=? AND");
+            } else {
+                throw new WrongPrimaryKeyException("La classe du DAO ne contient pas de clé primaire nommé : " + pk.fieldName);
+            }
+        }
+        sqlBuilder.delete(sqlBuilder.lastIndexOf("AND"), sqlBuilder.length());
+
+        System.out.println(sqlBuilder);
+
+        try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
+            for (int i = 0; i < primaryKeys.length; i++) {
+                statement.setObject(i + 1, primaryKeys[i].fieldValue);
+            }
+            ResultSet resultSet = statement.executeQuery();
+            resultSet.next();
+            return createInstance(resultSet);
         } catch (SQLException err) {
             err.printStackTrace();
             return null;
@@ -239,9 +310,28 @@ public final class Dao<E> {
                 case DOUBLE -> resultSet.getDouble(name);
                 case CHAR, VARCHAR, LONG_VARCHAR -> resultSet.getString(name);
             };
-        }catch (SQLException ignored) {
+        } catch (SQLException ignored) {
             return resultSet.getObject(name);
         }
     }
 
+
+    /**
+     * Représente un champ dans la base de donnée. <br>
+     * Comporte le nom du champ ainsi que sa valeur.
+     *
+     * @author Loïc HENRY
+     * @author https://github.com/Loicyeu
+     * @version 1.0
+     * @since 1.0
+     */
+    public static final class FieldData {
+        private String fieldName;
+        private Object fieldValue;
+
+        public FieldData(String fieldName, Object fieldValue) {
+            this.fieldName = fieldName;
+            this.fieldValue = fieldValue;
+        }
+    }
 }
