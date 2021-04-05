@@ -1,4 +1,6 @@
-package fr.loicyeu.dao;
+package fr.loicyeu.dao.annotations;
+
+import fr.loicyeu.dao.FieldType;
 
 import java.lang.annotation.*;
 

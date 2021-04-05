@@ -1,4 +1,4 @@
-package fr.loicyeu.dao;
+package fr.loicyeu.dao.annotations;
 
 import java.lang.annotation.*;
 
@@ -8,6 +8,6 @@ import java.lang.annotation.*;
 public @interface ForeignKey {
 
     Class<?> references();
-    String field() default "";
+    String key() default "";
 
 }

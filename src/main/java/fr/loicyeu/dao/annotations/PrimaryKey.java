@@ -1,4 +1,4 @@
-package fr.loicyeu.dao;
+package fr.loicyeu.dao.annotations;
 
 import java.lang.annotation.*;
 

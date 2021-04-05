@@ -5,4 +5,5 @@ module fr.loicyeu.dao {
 
     exports fr.loicyeu.dao;
     exports fr.loicyeu.dao.exceptions;
+    exports fr.loicyeu.dao.annotations;
 }
