@@ -24,12 +24,11 @@ import static fr.loicyeu.dao.utils.DaoUtils.*;
  * @param <E> La classe du DAO.
  * @author Loïc HENRY
  * @author https://github.com/Loicyeu
- * @version 1.0
  * @since 1.0
  */
 public final class Dao<E> {
 
-    protected static final List<String> tablesName = new LinkedList<>();
+    private static final List<String> tablesName = new LinkedList<>();
 
     private final Connection connection;
     private final Constructor<E> constructor;
@@ -206,7 +205,7 @@ public final class Dao<E> {
     /**
      * Permet de récupérer tous les objets de la classe du DAO dans la base de données.
      *
-     * @return Une liste de tous les objets ou {@code null} si une erreur est survenu.
+     * @return Une liste de tous les objets ou une liste vide si une erreur est survenu.
      */
     public List<E> findAll() {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + tableName)) {
@@ -221,7 +220,7 @@ public final class Dao<E> {
             return eList;
         } catch (SQLException err) {
             err.printStackTrace();
-            return null;
+            return List.of();
         }
     }
 
@@ -267,7 +266,7 @@ public final class Dao<E> {
             return eList;
         } catch (SQLException err) {
             err.printStackTrace();
-            return null;
+            return List.of();
         }
 
     }
@@ -386,7 +385,7 @@ public final class Dao<E> {
      */
     public <T> T findFrom11Relation(Dao<T> otherDao, E e) throws DaoException {
         List<T> tList = findFromRelation(hasOne, otherDao, e);
-        if (tList != null && tList.size() >= 1) {
+        if (tList != null && !tList.isEmpty()) {
             return tList.get(0);
         } else {
             return null;
@@ -451,7 +450,7 @@ public final class Dao<E> {
                     statement.executeUpdate();
                 } catch (SQLException e) {
                     e.printStackTrace();
-                    throw new RuntimeException(e);
+                    throw new UnexpectedDaoException(e);
                 }
             });
         } catch (RuntimeException e) {
@@ -473,9 +472,9 @@ public final class Dao<E> {
         try {
             constructor.setAccessible(true);
             E e = constructor.newInstance();
-            for (Field field : daoFieldMap.keySet()) {
-                field.setAccessible(true);
-                field.set(e, getValueFromResultSet(resultSet, daoFieldMap.get(field).name()));
+            for (Map.Entry<Field, DaoField> field : daoFieldMap.entrySet()) {
+                field.getKey().setAccessible(true);
+                field.getKey().set(e, getValueFromResultSet(resultSet, field.getValue().name()));
             }
             return e;
         } catch (Exception err) {
@@ -501,7 +500,7 @@ public final class Dao<E> {
             return tList;
         } catch (SQLException e) {
             e.printStackTrace();
-            return null;
+            return List.of();
         }
     }
 
@@ -530,11 +529,10 @@ public final class Dao<E> {
             return createInstances(resultSet, otherDao);
         } catch (SQLException err) {
             err.printStackTrace();
-            return null;
+            return List.of();
         }
     }
 
-    //FIXME: vérifier que e et t soit bien dans la bdd.
     private <T> boolean insertInRelation(Map<Dao<?>, String> hasMap, Dao<T> otherDao, E e, T t) throws DaoException {
         if (!hasMap.containsKey(otherDao)) {
             throw new NoRelationException("Aucune relation n'a été trouvée avec le DAO fournit.");

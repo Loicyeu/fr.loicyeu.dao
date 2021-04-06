@@ -1,3 +1,8 @@
+/**
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @since 1.0
+ */
 module fr.loicyeu.dao {
 
     requires java.compiler;

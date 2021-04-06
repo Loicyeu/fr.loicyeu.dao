@@ -16,6 +16,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Classe util de {@link fr.loicyeu.dao.Dao}.
+ *
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @since 1.0
+ */
 public class DaoUtils {
     private DaoUtils() {
 
