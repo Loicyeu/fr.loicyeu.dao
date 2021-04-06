@@ -4,10 +4,7 @@ import fr.loicyeu.dao.annotations.DaoField;
 import fr.loicyeu.dao.annotations.DaoSuper;
 import fr.loicyeu.dao.annotations.DaoTable;
 import fr.loicyeu.dao.annotations.PrimaryKey;
-import fr.loicyeu.dao.exceptions.DaoException;
-import fr.loicyeu.dao.exceptions.MissingPrimaryKeyException;
-import fr.loicyeu.dao.exceptions.NoPrimaryKeyException;
-import fr.loicyeu.dao.exceptions.WrongPrimaryKeyException;
+import fr.loicyeu.dao.exceptions.*;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -42,8 +39,10 @@ public final class Dao<E> {
     private final Map<Field, DaoField> daoFieldMap;
     private final Map<String, FieldType> fieldTypeMap;
     private final Map<String, Field> primaryKeys;
-    private final Map<String, Dao<?>> hasManyList;
-    private final Map<String, Dao<?>> hasOne;
+
+    private final Map<Dao<?>, String> hasMany;
+    private final Map<Dao<?>, String> hasOne;
+
 
     /**
      * Constructeur permettant de fabriquer un Dao pour la classe fournie.
@@ -63,11 +62,12 @@ public final class Dao<E> {
         this.fieldTypeMap = getFieldsDetails();
         this.primaryKeys = getPrimaryKeys();
 
-        this.hasManyList = new HashMap<>();
+        this.hasMany = new HashMap<>();
         this.hasOne = new HashMap<>();
 
         tablesName.add(tableName);
     }
+
 
     /**
      * Permet d'associer la classe du DAO a une classe par la relation 1-1.
@@ -80,7 +80,7 @@ public final class Dao<E> {
     public void hasOne(Dao<?> otherDao, String relationName) {
         verifyRelation(otherDao, relationName);
         tablesName.add(relationName);
-        this.hasOne.put(relationName, otherDao);
+        this.hasOne.put(otherDao, relationName);
     }
 
     /**
@@ -94,7 +94,7 @@ public final class Dao<E> {
     public void hasMany(Dao<?> otherDao, String relationName) {
         verifyRelation(otherDao, relationName);
         tablesName.add(relationName);
-        this.hasManyList.put(relationName, otherDao);
+        this.hasMany.put(otherDao, relationName);
     }
 
 
@@ -130,7 +130,6 @@ public final class Dao<E> {
         }
     }
 
-
     /**
      * Permet de supprimer la table de la base de donnée.
      *
@@ -146,6 +145,7 @@ public final class Dao<E> {
         }
     }
 
+
     /**
      * Permet d'ajouter un objet dans la base de données.
      *
@@ -153,7 +153,7 @@ public final class Dao<E> {
      * @return Vrai si l'objet a bien été ajouté, faux sinon.
      */
     public boolean insert(E e) {
-        Map<String, Object> fieldsValues = getFieldsValues(e);
+        Map<String, Object> fieldsValues = getFieldsValues(this.daoFieldMap, e);
         StringBuilder sqlBuilder = new StringBuilder();
         List<Object> valuesList = new ArrayList<>();
 
@@ -233,10 +233,94 @@ public final class Dao<E> {
                 statement.setObject(i + 1, primaryKeys[i].getFieldValue());
             }
             ResultSet resultSet = statement.executeQuery();
-            resultSet.next();
-            return createInstance(resultSet);
+            if (resultSet.next()) {
+                return createInstance(resultSet);
+            } else {
+                return null;
+            }
         } catch (SQLException err) {
             err.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Permet de récupérer tous les objets de la base de données coïncidant avec tous les champs passés en paramètres.
+     * L'opérateur {@code AND} est utilisé entre tous les champs dans la requête. Dans le cas ou aucun champs ne serait
+     * donnés, la méthode se comporte comme {@link #findAll()}.
+     *
+     * @param fields La liste de tous les champs recherchés dans les objets.
+     * @return La liste des objets de la base de données coïncidant.
+     * @throws DaoException Si le nombre de champs passés en paramètres sont supérieurs au nombre de champs du DAO,
+     *                      ou si un champ n'existe pas dans le DAO.
+     */
+    public List<E> findAllWhere(FieldData... fields) throws DaoException {
+        if (fields.length == 0) {
+            return findAll();
+        }
+        List<E> eList = new ArrayList<>();
+        if (fields.length > daoFieldMap.size()) {
+            throw new TooManyFieldsException("Le nombre de champs passés (" + fields.length +
+                    ") est supérieur au nombre de champs que comporte le DAO (" + daoFieldMap.size() + ").");
+        }
+
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("SELECT * FROM ").append(tableName).append(" WHERE ");
+        for (FieldData field : fields) {
+            if (this.fieldTypeMap.containsKey(field.getFieldName())) {
+                sqlBuilder.append(field.getFieldName()).append("=? AND ");
+            } else {
+                throw new WrongFieldException("Le DAO ne contient pas de champ nommé : " + field.getFieldName());
+            }
+        }
+        sqlBuilder.delete(sqlBuilder.lastIndexOf("AND"), sqlBuilder.length());
+
+        try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
+            for (int i = 0; i < fields.length; i++) {
+                statement.setObject(i + 1, fields[i].getFieldValue());
+            }
+            ResultSet resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                eList.add(createInstance(resultSet));
+            }
+            return eList;
+        } catch (SQLException err) {
+            err.printStackTrace();
+            return null;
+        }
+
+    }
+
+    
+    /**
+     * Permet de récupérer tous les objets de la base de données correspondant à {@code e} via la relation impliquant le
+     * DAO {@code otherDao}.
+     *
+     * @param otherDao Le DAO de la relation.
+     * @param e        L'élément dont on veut les objets de la relation.
+     * @param <T>      Le type du DAO de la relation.
+     * @return La liste des objets correspondant ou null si une erreur s'est produite.
+     * @throws DaoException Si aucune relation ne comporte le DAO.
+     */
+    public <T> List<T> findFrom1NRelation(Dao<T> otherDao, E e) throws DaoException {
+        return findFromRelation(hasMany, otherDao, e);
+    }
+
+    /**
+     * Permet de récupérer l'objets de la base de données correspondant à {@code e} via la relation impliquant le
+     * DAO {@code otherDao}.
+     *
+     * @param otherDao Le DAO de la relation.
+     * @param e        L'élément dont on veut l'objet de la relation.
+     * @param <T>      Le type du DAO de la relation.
+     * @return L'objet correspondant ou null s'il n'y en a pas ou si une erreur s'est produite.
+     * @throws DaoException Si aucune relation ne comporte le DAO.
+     */
+    public <T> T findFrom11Relation(Dao<T> otherDao, E e) throws DaoException {
+        List<T> tList = findFromRelation(hasOne, otherDao, e);
+        if (tList != null && tList.size() >= 1) {
+            return tList.get(0);
+        } else {
             return null;
         }
     }
@@ -306,12 +390,12 @@ public final class Dao<E> {
         return primaryKeys;
     }
 
-    private Map<String, Object> getFieldsValues(E e) {
+    private <T> Map<String, Object> getFieldsValues(Map<Field, DaoField> fieldMap, T t) {
         Map<String, Object> fieldsValues = new HashMap<>();
-        daoFieldMap.forEach((field, daoField) -> {
+        fieldMap.forEach((field, daoField) -> {
             field.setAccessible(true);
             try {
-                fieldsValues.put(daoField.name(), field.get(e));
+                fieldsValues.put(daoField.name(), field.get(t));
             } catch (IllegalAccessException err) {
                 err.printStackTrace();
             }
@@ -339,9 +423,9 @@ public final class Dao<E> {
         }
     }
 
-    private boolean createHasOneTables() {
+    private boolean createRelationTable(Map<Dao<?>, String> map, boolean is1N) {
         try {
-            this.hasOne.forEach((relationName, dao) -> {
+            map.forEach((dao, relationName) -> {
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append("CREATE TABLE IF NOT EXISTS ").append(relationName).append(" (\n");
                 StringBuilder fkBuilder = new StringBuilder();
@@ -360,6 +444,9 @@ public final class Dao<E> {
                     DaoField daoField = dao.daoFieldMap.get(field);
                     sqlBuilder.append("\t").append(dao.tableName).append(name).append(" ")
                             .append(daoField.type().getSQL()).append(",\n");
+                    if (is1N) {
+                        pkBuilder.append(dao.tableName).append(name).append(",");
+                    }
                     fkBuilder.append("\tFOREIGN KEY (").append(dao.tableName).append(name).append(") REFERENCES ")
                             .append(dao.tableName).append("(").append(name).append("),\n");
                 });
@@ -383,49 +470,12 @@ public final class Dao<E> {
         return true;
     }
 
+    private boolean createHasOneTables() {
+        return createRelationTable(this.hasOne, false);
+    }
+
     private boolean createHasManyTables() {
-        try {
-            this.hasManyList.forEach((relationName, dao) -> {
-                StringBuilder sqlBuilder = new StringBuilder();
-                sqlBuilder.append("CREATE TABLE IF NOT EXISTS ").append(relationName).append(" (\n");
-                StringBuilder fkBuilder = new StringBuilder();
-                StringBuilder pkBuilder = new StringBuilder("\tPRIMARY KEY (");
-
-                this.primaryKeys.forEach((name, field) -> {
-                    DaoField daoField = this.daoFieldMap.get(field);
-                    sqlBuilder.append("\t").append(this.tableName).append(name).append(" ")
-                            .append(daoField.type().getSQL()).append(",\n");
-                    pkBuilder.append(this.tableName).append(name).append(",");
-                    fkBuilder.append("\tFOREIGN KEY (").append(this.tableName).append(name).append(") REFERENCES ")
-                            .append(this.tableName).append("(").append(name).append("),\n");
-                });
-
-                dao.primaryKeys.forEach((name, field) -> {
-                    DaoField daoField = dao.daoFieldMap.get(field);
-                    sqlBuilder.append("\t").append(dao.tableName).append(name).append(" ")
-                            .append(daoField.type().getSQL()).append(",\n");
-                    pkBuilder.append(dao.tableName).append(name).append(",");
-                    fkBuilder.append("\tFOREIGN KEY (").append(dao.tableName).append(name).append(") REFERENCES ")
-                            .append(dao.tableName).append("(").append(name).append("),\n");
-                });
-
-                pkBuilder.deleteCharAt(pkBuilder.lastIndexOf(",")).append("),\n");
-                sqlBuilder.append(pkBuilder);
-                sqlBuilder.append(fkBuilder);
-                sqlBuilder.deleteCharAt(sqlBuilder.lastIndexOf(",")).append(")\n");
-
-                try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
-                    statement.executeUpdate();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
-            });
-        } catch (RuntimeException e) {
-            e.printStackTrace();
-            return false;
-        }
-        return true;
+        return createRelationTable(this.hasMany, true);
     }
 
     private E createInstance(ResultSet resultSet) {
@@ -438,6 +488,58 @@ public final class Dao<E> {
             }
             return e;
         } catch (Exception err) {
+            err.printStackTrace();
+            return null;
+        }
+    }
+
+    private <T> List<T> createInstances(ResultSet resultSet, Dao<T> otherDao) {
+        try {
+            List<T> tList = new ArrayList<>();
+            while (resultSet.next()) {
+                List<FieldData> fieldDataList = new ArrayList<>();
+                for (String s : otherDao.primaryKeys.keySet()) {
+                    Object obj = otherDao.getValueFromResultSet(resultSet, s + otherDao.tableName);
+                    fieldDataList.add(new FieldData(s, obj));
+                }
+                List<T> res = otherDao.findAllWhere(fieldDataList.toArray(new FieldData[0]));
+                if (res != null) {
+                    tList.addAll(res);
+                }
+            }
+            return tList;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private <T> List<T> findFromRelation(Map<Dao<?>, String> hasMap, Dao<T> otherDao, E e) {
+        if (!hasMap.containsKey(otherDao)) {
+            throw new NoRelationException("Aucune relation n'a été trouvé avec le DAO fournit.");
+        }
+        String relationName = hasMap.get(otherDao);
+
+        Map<Field, DaoField> pkFieldMap = new HashMap<>();
+        primaryKeys.forEach((s, field) -> pkFieldMap.put(field, daoFieldMap.get(field)));
+        Map<String, Object> fieldsValues = getFieldsValues(pkFieldMap, e);
+        List<Object> valuesList = new ArrayList<>();
+
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("SELECT * FROM ").append(relationName).append(" WHERE ");
+        fieldsValues.forEach((field, value) -> {
+            sqlBuilder.append(tableName).append(field).append("=? AND ");
+            valuesList.add(value);
+        });
+        sqlBuilder.delete(sqlBuilder.lastIndexOf("AND"), sqlBuilder.length());
+
+        try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
+            for (int i = 0; i < valuesList.size(); i++) {
+                statement.setObject(i + 1, valuesList.get(i));
+            }
+            ResultSet resultSet = statement.executeQuery();
+            return createInstances(resultSet, otherDao);
+        } catch (SQLException err) {
             err.printStackTrace();
             return null;
         }
