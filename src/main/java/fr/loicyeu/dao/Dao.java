@@ -1,19 +1,19 @@
 package fr.loicyeu.dao;
 
 import fr.loicyeu.dao.annotations.DaoField;
-import fr.loicyeu.dao.annotations.DaoSuper;
 import fr.loicyeu.dao.annotations.DaoTable;
-import fr.loicyeu.dao.annotations.PrimaryKey;
 import fr.loicyeu.dao.exceptions.*;
+import fr.loicyeu.dao.utils.DaoUtils;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+
+import static fr.loicyeu.dao.utils.DaoUtils.*;
 
 /**
  * Représente un DAO générique permettant la gestion d'une base de données pour une classe donnée.<br>
@@ -33,7 +33,6 @@ public final class Dao<E> {
 
     private final Connection connection;
     private final Constructor<E> constructor;
-    private final boolean fetchSuperFields;
 
     private final String tableName;
     private final Map<Field, DaoField> daoFieldMap;
@@ -57,10 +56,9 @@ public final class Dao<E> {
         this.constructor = isValideClass(e);
         DaoTable daoTable = e.getAnnotation(DaoTable.class);
         this.tableName = daoTable.tableName();
-        this.fetchSuperFields = daoTable.fetchSuperFields();
-        this.daoFieldMap = getAnnotatedFields(e);
-        this.fieldTypeMap = getFieldsDetails();
-        this.primaryKeys = getPrimaryKeys();
+        this.daoFieldMap = getAnnotatedFields(e, daoTable.fetchSuperFields());
+        this.fieldTypeMap = getFieldsDetails(daoFieldMap);
+        this.primaryKeys = getPK(daoFieldMap);
 
         this.hasMany = new HashMap<>();
         this.hasOne = new HashMap<>();
@@ -121,11 +119,9 @@ public final class Dao<E> {
         }
         sqlBuilder.deleteCharAt(sqlBuilder.lastIndexOf(",")).append(")");
 
-        try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
-            statement.executeUpdate();
+        if (executeUpdate(connection, sqlBuilder.toString(), null)) {
             return createHasOneTables() && createHasManyTables();
-        } catch (SQLException e) {
-            e.printStackTrace();
+        } else {
             return false;
         }
     }
@@ -136,13 +132,7 @@ public final class Dao<E> {
      * @return Vrai si la table a bien été supprimé, faux sinon.
      */
     public boolean dropTable() {
-        try (PreparedStatement statement = connection.prepareStatement("DROP TABLE " + tableName)) {
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return executeUpdate(connection, "DROP TABLE " + tableName, null);
     }
 
 
@@ -166,16 +156,7 @@ public final class Dao<E> {
         sqlBuilder.append("?,".repeat(valuesList.size())).deleteCharAt(sqlBuilder.lastIndexOf(","));
         sqlBuilder.append(")");
 
-        try (PreparedStatement statement = connection.prepareStatement(sqlBuilder.toString())) {
-            for (int i = 0; i < valuesList.size(); i++) {
-                statement.setObject(i + 1, valuesList.get(i));
-            }
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException err) {
-            err.printStackTrace();
-            return false;
-        }
+        return executeUpdate(connection, sqlBuilder.toString(), valuesList);
     }
 
     /**
@@ -291,7 +272,15 @@ public final class Dao<E> {
 
     }
 
-    
+
+    public <T> boolean insertIn1NRelation(Dao<T> otherDao, E e, T t) throws DaoException {
+        return insertInRelation(hasMany, otherDao, e, t);
+    }
+
+    public <T> boolean insertIn11Relation(Dao<T> otherDao, E e, T t) throws DaoException {
+        return insertInRelation(hasOne, otherDao, e, t);
+    }
+
     /**
      * Permet de récupérer tous les objets de la base de données correspondant à {@code e} via la relation impliquant le
      * DAO {@code otherDao}.
@@ -325,83 +314,6 @@ public final class Dao<E> {
         }
     }
 
-
-    /**
-     * Méthode permettant de vérifier que la classe fournie soit bien conforme aux exigences.
-     *
-     * @param clazz La classe a vérifier.
-     * @return Le constructeur vide de la classe dans le cas ou elle serait valide.
-     * @throws IllegalArgumentException Si la classe ne possède pas l'annotation {@link DaoTable}, ou ne comporte pas
-     *                                  de constructeur vide, ou alors est abstraite ou est une interface.
-     */
-    private Constructor<E> isValideClass(Class<E> clazz) throws IllegalArgumentException {
-        if (!clazz.isAnnotationPresent(DaoTable.class)) {
-            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() + "' ne porte pas l'annotation" +
-                    "'DaoTable' et ne peut donc pas être utilisé par le DAO.");
-        }
-
-        if (Modifier.isAbstract(clazz.getModifiers()) || Modifier.isInterface(clazz.getModifiers())) {
-            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() + "'" +
-                    "est abstraite ou est une interface et ne peut donc pas être utilisé par le DAO.");
-        }
-
-        try {
-            return clazz.getDeclaredConstructor();
-        } catch (NoSuchMethodException err) {
-            throw new IllegalArgumentException("La classe '" + clazz.getSimpleName() +
-                    "' ne comporte pas de constructeur vide et ne peut donc pas être utilisé par le DAO.");
-        }
-    }
-
-    protected Map<Field, DaoField> getAnnotatedFields(Class<?> clazz) {
-        Map<Field, DaoField> daoFieldMap = new HashMap<>();
-        for (Field field : clazz.getDeclaredFields()) {
-            if (field.isAnnotationPresent(DaoField.class)) {
-                daoFieldMap.put(field, field.getAnnotation(DaoField.class));
-            }
-        }
-        if (fetchSuperFields) {
-            Class<?> cl = clazz.getSuperclass();
-            while (cl != null && cl.isAnnotationPresent(DaoSuper.class)) {
-                for (Field field : cl.getDeclaredFields()) {
-                    if (field.isAnnotationPresent(DaoField.class)) {
-                        daoFieldMap.put(field, field.getAnnotation(DaoField.class));
-                    }
-                }
-                cl = cl.getSuperclass();
-            }
-        }
-        return daoFieldMap;
-    }
-
-    private Map<String, FieldType> getFieldsDetails() {
-        Map<String, FieldType> map = new HashMap<>();
-        this.daoFieldMap.forEach((field, daoField) -> map.put(daoField.name(), daoField.type()));
-        return map;
-    }
-
-    private Map<String, Field> getPrimaryKeys() {
-        Map<String, Field> primaryKeys = new HashMap<>();
-        this.daoFieldMap.forEach((field, daoField) -> {
-            if (field.isAnnotationPresent(PrimaryKey.class)) {
-                primaryKeys.put(daoField.name(), field);
-            }
-        });
-        return primaryKeys;
-    }
-
-    private <T> Map<String, Object> getFieldsValues(Map<Field, DaoField> fieldMap, T t) {
-        Map<String, Object> fieldsValues = new HashMap<>();
-        fieldMap.forEach((field, daoField) -> {
-            field.setAccessible(true);
-            try {
-                fieldsValues.put(daoField.name(), field.get(t));
-            } catch (IllegalAccessException err) {
-                err.printStackTrace();
-            }
-        });
-        return fieldsValues;
-    }
 
     /**
      * Permet de vérifier que la relation à ajouter au DAO est valide.
@@ -520,9 +432,7 @@ public final class Dao<E> {
         }
         String relationName = hasMap.get(otherDao);
 
-        Map<Field, DaoField> pkFieldMap = new HashMap<>();
-        primaryKeys.forEach((s, field) -> pkFieldMap.put(field, daoFieldMap.get(field)));
-        Map<String, Object> fieldsValues = getFieldsValues(pkFieldMap, e);
+        Map<String, Object> fieldsValues = getFieldsValues(getPkDaoField(primaryKeys, daoFieldMap), e);
         List<Object> valuesList = new ArrayList<>();
 
         StringBuilder sqlBuilder = new StringBuilder();
@@ -543,6 +453,31 @@ public final class Dao<E> {
             err.printStackTrace();
             return null;
         }
+    }
+
+    private <T> boolean insertInRelation(Map<Dao<?>, String> hasMap, Dao<T> otherDao, E e, T t) throws DaoException {
+        if (!hasMap.containsKey(otherDao)) {
+            throw new NoRelationException("Aucune relation n'a été trouvée avec le DAO fournit.");
+        }
+        String relationName = hasMap.get(otherDao);
+        Map<String, Object> eMap = getFieldsValues(DaoUtils.getPkDaoField(primaryKeys, daoFieldMap), e);
+        Map<String, Object> tMap = getFieldsValues(getPkDaoField(otherDao.primaryKeys, otherDao.daoFieldMap), t);
+        List<Object> valuesList = new ArrayList<>();
+
+        StringBuilder sqlBuilder = new StringBuilder("INSERT INTO ");
+        sqlBuilder.append(relationName).append("(");
+        eMap.forEach((name, value) -> {
+            sqlBuilder.append(relationName).append(name).append(",");
+            valuesList.add(value);
+        });
+        tMap.forEach((name, value) -> {
+            sqlBuilder.append(relationName).append(name).append(",");
+            valuesList.add(value);
+        });
+        sqlBuilder.deleteCharAt(sqlBuilder.lastIndexOf(",")).append(") VALUES (");
+        sqlBuilder.append("?,".repeat(valuesList.size())).deleteCharAt(sqlBuilder.lastIndexOf(",")).append(")");
+
+        return executeUpdate(connection, sqlBuilder.toString(), valuesList);
     }
 
     private Object getValueFromResultSet(ResultSet resultSet, String name) throws SQLException {
