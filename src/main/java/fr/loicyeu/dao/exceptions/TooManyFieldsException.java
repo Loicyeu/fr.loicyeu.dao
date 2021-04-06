@@ -1,20 +1,19 @@
 package fr.loicyeu.dao.exceptions;
 
 /**
- * Représente une erreur de classe ne comportant aucune clés primaires.
+ * Représente une erreur de champs trop nombreux dans une requête.
  *
  * @author Loïc HENRY
  * @author https://github.com/Loicyeu
  * @since 1.0
  */
-public final class NoPrimaryKeyException extends DaoException {
-
+public final class TooManyFieldsException extends DaoException {
     /**
      * Constructs a new runtime exception with {@code null} as its
      * detail message.  The cause is not initialized, and may subsequently be
      * initialized by a call to {@link #initCause}.
      */
-    public NoPrimaryKeyException() {
+    public TooManyFieldsException() {
     }
 
     /**
@@ -25,7 +24,7 @@ public final class NoPrimaryKeyException extends DaoException {
      * @param message the detail message. The detail message is saved for
      *                later retrieval by the {@link #getMessage()} method.
      */
-    public NoPrimaryKeyException(String message) {
+    public TooManyFieldsException(String message) {
         super(message);
     }
 }

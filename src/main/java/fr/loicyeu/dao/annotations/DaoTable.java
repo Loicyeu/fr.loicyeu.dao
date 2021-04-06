@@ -1,9 +1,9 @@
-package fr.loicyeu.dao;
+package fr.loicyeu.dao.annotations;
 
 import java.lang.annotation.*;
 
 /**
- * Permet d'indiquer au {@link Dao} le nom unique de la table qui accueillera cette classe.<br>
+ * Permet d'indiquer au {@link fr.loicyeu.dao.Dao} le nom unique de la table qui accueillera cette classe.<br>
  * L'annotation permet également de définir s'il faut remonter l'arborescence des classes
  * pour y trouver des champs a inclure dans la base de données. Par défaut cette option est désactivée.
  * Dans le cas ou elle serait activé, il faut annoter toutes les super classes avec {@link DaoSuper}.

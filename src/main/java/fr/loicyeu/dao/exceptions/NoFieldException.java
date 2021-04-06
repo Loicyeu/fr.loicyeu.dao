@@ -1,12 +1,19 @@
 package fr.loicyeu.dao.exceptions;
 
-public class WrongPrimaryKeyException extends DaoException {
+/**
+ * Représente une erreur de champ inexistant.
+ *
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @since 1.0
+ */
+public final class NoFieldException extends DaoException {
     /**
      * Constructs a new runtime exception with {@code null} as its
      * detail message.  The cause is not initialized, and may subsequently be
      * initialized by a call to {@link #initCause}.
      */
-    public WrongPrimaryKeyException() {
+    public NoFieldException() {
     }
 
     /**
@@ -17,7 +24,7 @@ public class WrongPrimaryKeyException extends DaoException {
      * @param message the detail message. The detail message is saved for
      *                later retrieval by the {@link #getMessage()} method.
      */
-    public WrongPrimaryKeyException(String message) {
+    public NoFieldException(String message) {
         super(message);
     }
 }

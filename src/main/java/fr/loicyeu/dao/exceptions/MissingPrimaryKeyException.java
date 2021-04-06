@@ -1,5 +1,12 @@
 package fr.loicyeu.dao.exceptions;
 
+/**
+ * Représente une erreur de clé primaire manquante dans un DAO.
+ *
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @since 1.0
+ */
 public final class MissingPrimaryKeyException extends DaoException {
     /**
      * Constructs a new runtime exception with {@code null} as its

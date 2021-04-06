@@ -1,19 +1,19 @@
 package fr.loicyeu.dao.exceptions;
 
 /**
- * Représente une erreur dans le DAO.
+ * Représente une erreur inattendue.
  *
  * @author Loïc HENRY
  * @author https://github.com/Loicyeu
  * @since 1.0
  */
-public abstract class DaoException extends RuntimeException {
+public class UnexpectedDaoException extends DaoException {
     /**
      * Constructs a new runtime exception with {@code null} as its
      * detail message.  The cause is not initialized, and may subsequently be
      * initialized by a call to {@link #initCause}.
      */
-    protected DaoException() {
+    public UnexpectedDaoException() {
     }
 
     /**
@@ -24,7 +24,7 @@ public abstract class DaoException extends RuntimeException {
      * @param message the detail message. The detail message is saved for
      *                later retrieval by the {@link #getMessage()} method.
      */
-    protected DaoException(String message) {
+    public UnexpectedDaoException(String message) {
         super(message);
     }
 
@@ -41,7 +41,7 @@ public abstract class DaoException extends RuntimeException {
      *              unknown.)
      * @since 1.4
      */
-    protected DaoException(Throwable cause) {
+    public UnexpectedDaoException(Throwable cause) {
         super(cause);
     }
 }
