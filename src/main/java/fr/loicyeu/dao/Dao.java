@@ -182,7 +182,7 @@ public final class Dao<E> {
             if (this.primaryKeys.containsKey(pk.getFieldName())) {
                 sqlBuilder.append(pk.getFieldName()).append("=? AND");
             } else {
-                throw new WrongPrimaryKeyException("La classe du DAO ne contient pas de clé primaire nommé : " + pk.getFieldName());
+                throw new NoPrimaryKeyException("La classe du DAO ne contient pas de clé primaire nommé : " + pk.getFieldName());
             }
         }
         sqlBuilder.delete(sqlBuilder.lastIndexOf("AND"), sqlBuilder.length());
@@ -251,7 +251,7 @@ public final class Dao<E> {
             if (this.fieldTypeMap.containsKey(field.getFieldName())) {
                 sqlBuilder.append(field.getFieldName()).append("=? AND ");
             } else {
-                throw new WrongFieldException("Le DAO ne contient pas de champ nommé : " + field.getFieldName());
+                throw new NoFieldException("Le DAO ne contient pas de champ nommé : " + field.getFieldName());
             }
         }
         sqlBuilder.delete(sqlBuilder.lastIndexOf("AND"), sqlBuilder.length());

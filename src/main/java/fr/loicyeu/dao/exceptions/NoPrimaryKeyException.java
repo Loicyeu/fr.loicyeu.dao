@@ -1,6 +1,13 @@
 package fr.loicyeu.dao.exceptions;
 
-public class NoPrimaryKeyException extends DaoException {
+/**
+ * Représente une erreur de classe ne comportant aucune clés primaires.
+ *
+ * @author Loïc HENRY
+ * @author https://github.com/Loicyeu
+ * @since 1.0
+ */
+public final class NoPrimaryKeyException extends DaoException {
 
     /**
      * Constructs a new runtime exception with {@code null} as its
