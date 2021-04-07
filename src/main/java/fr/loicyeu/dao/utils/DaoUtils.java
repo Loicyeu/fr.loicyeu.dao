@@ -113,6 +113,7 @@ public class DaoUtils {
     }
 
     public static boolean executeUpdate(Connection connection, String sql, List<Object> valuesList) {
+        System.out.println(sql);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             if (valuesList != null) {
                 for (int i = 0; i < valuesList.size(); i++) {
@@ -122,6 +123,7 @@ public class DaoUtils {
             statement.executeUpdate();
             return true;
         } catch (SQLException err) {
+            System.out.println("ERROR CODE : " + err.getSQLState());
             err.printStackTrace();
             return false;
         }

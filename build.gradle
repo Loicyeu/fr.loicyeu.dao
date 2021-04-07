@@ -1,6 +1,9 @@
 plugins {
     id 'java'
+    id 'jacoco'
 }
+
+apply plugin: 'maven'
 
 java {
     modularity.inferModulePath = true
@@ -36,4 +39,18 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+    reports {
+        xml.enabled false
+        csv.enabled false
+        html.destination file("${buildDir}/jacocoHtml")
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.6"
 }
