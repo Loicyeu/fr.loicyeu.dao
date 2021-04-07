@@ -107,7 +107,7 @@ public final class Dao<E> {
             dropTable();
         }
         StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("CREATE TABLE IF NOT EXISTS ").append(this.tableName).append(" (\n");
+        sqlBuilder.append("CREATE TABLE ").append(this.tableName).append(" (\n");
         fieldTypeMap.forEach((name, fieldType) ->
                 sqlBuilder.append("\t").append(name).append(" ").append(fieldType.getSQL()).append(",\n"));
 
@@ -231,18 +231,13 @@ public final class Dao<E> {
      *
      * @param fields La liste de tous les champs recherchés dans les objets.
      * @return La liste des objets de la base de données coïncidant.
-     * @throws DaoException Si le nombre de champs passés en paramètres sont supérieurs au nombre de champs du DAO,
-     *                      ou si un champ n'existe pas dans le DAO.
+     * @throws DaoException Si un champ n'existe pas dans le DAO.
      */
     public List<E> findAllWhere(FieldData... fields) throws DaoException {
         if (fields.length == 0) {
             return findAll();
         }
         List<E> eList = new ArrayList<>();
-        if (fields.length > daoFieldMap.size()) {
-            throw new TooManyFieldsException("Le nombre de champs passés (" + fields.length +
-                    ") est supérieur au nombre de champs que comporte le DAO (" + daoFieldMap.size() + ").");
-        }
 
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append("SELECT * FROM ").append(tableName).append(" WHERE ");
@@ -304,7 +299,7 @@ public final class Dao<E> {
      * Seules les clés primaires de l'objet ne seront prisent en compte lors de la recherche.
      *
      * @param e L'objet a supprimer de la base de données.
-     * @return Vrai si l'objet a bien été supprimer, faux sinon.
+     * @return Vrai si l'objet a bien été supprimé ou s'il n'existait pas, faux si une erreur s'est produite.
      */
     public boolean delete(E e) {
         Map<String, Object> fieldValues = getFieldsValues(daoFieldMap, e);
@@ -327,7 +322,7 @@ public final class Dao<E> {
      * @return Vrai si la table a bien été purger, faux sinon.
      */
     public boolean purge() {
-        return executeUpdate(connection, "DROP FROM " + tableName, null);
+        return executeUpdate(connection, "DELETE FROM " + tableName, null);
     }
 
 
